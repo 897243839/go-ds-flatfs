@@ -34,8 +34,8 @@ import (
 var maps sync.RWMutex
 var mapLit = make(map[string]int, 1000)
 //var myTimer = time.Now().Unix() // 启动定时器
-var ticker = time.NewTicker(30 * time.Second) //计时器
-var ticker1 = time.NewTicker(1 * time.Minute) //计时器
+var ticker = time.NewTicker(60 * time.Second) //计时器
+var ticker1 = time.NewTicker(30 * time.Minute) //计时器
 
 var hclist = make(map[string][]byte)
 
@@ -226,6 +226,7 @@ func Pr() {
 	//	fmt.Println(i,n)
 	//}
 	//fmt.Println("-------------------------------")
+
 	mapLit = make(map[string]int, 1000)
 
 }
@@ -303,14 +304,7 @@ func (fs *Datastore) dohotPut(key datastore.Key, val []byte) error {
 			_ = os.Remove(tmp.Name())
 		}
 	}()
-	//压缩
-	select {
-	case <-ticker.C:
-		Jl(key.String())
-		Pr()
-	default:
-		Jl(key.String())
-	}
+
 	if _, err := tmp.Write(val); err != nil {
 		return err
 	}
@@ -357,18 +351,7 @@ func (fs *Datastore) Get_writer(dir string,path string) ( err error) {
 	if err != nil {
 		return err
 	}
-	closed := false
-	removed := false
-	defer func() {
-		if !closed {
-			// silence errcheck
-			_ = tmp.Close()
-		}
-		if !removed {
-			// silence errcheck
-			_ = os.Remove(tmp.Name())
-		}
-	}()
+
 	//压缩
 	fmt.Printf("get_writer触发\n")
 	//Jl(key.String())
@@ -384,19 +367,17 @@ func (fs *Datastore) Get_writer(dir string,path string) ( err error) {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	closed = true
-
 	err = fs.renameAndUpdateDiskUsage(tmp.Name(), path)
 	if err != nil {
 		return err
 	}
-	removed = true
-
 	if fs.sync {
 		if err := syncDir(dir); err != nil {
 			return err
 		}
 	}
+	defer tmp.Close()
+	defer os.Remove(tmp.Name())
 
 
 	return nil
