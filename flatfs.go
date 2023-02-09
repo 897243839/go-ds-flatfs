@@ -28,9 +28,11 @@ import (
 	//"io"
 )
 
-func get_maphot() map[string]int {
+func get_maphot()map[string]int{
 	return maphot
 }
+
+
 
 var log = logging.Logger("flatfs")
 
@@ -65,8 +67,8 @@ var (
 	// before giving up.
 	RetryAttempts = 6
 
-	block_hot = "blockhot.json"
-	maphot    = make(map[string]int, 1000)
+	block_hot="blockhot.json"
+	maphot = make(map[string]int, 1000)
 )
 
 const (
@@ -122,14 +124,15 @@ var (
 func init() {
 	rand.Seed(time.Now().UTC().UnixNano())
 
+
 }
 
 // Datastore implements the go-datastore Interface.
 // Note this datastore cannot guarantee order of concurrent
 // write operations to the same key. See the explanation in
 // Put().
-// 数据存储实现go数据存储接口。
-// \/\/请注意，此数据存储不能保证对同一密钥执行并发\/\/写操作的顺序。请参见\/\/Put（）中的说明。
+//数据存储实现go数据存储接口。
+//\/\/请注意，此数据存储不能保证对同一密钥执行并发\/\/写操作的顺序。请参见\/\/Put（）中的说明。
 type Datastore struct {
 	// atmoic operations should always be used with diskUsage.
 	// Must be first in struct to ensure correct alignment
@@ -305,13 +308,13 @@ func Open(path string, syncFiles bool) (*Datastore, error) {
 	fpath := filepath.Join(fs.path, block_hot)
 	_, err = os.Stat(fpath)
 	if os.IsNotExist(err) {
-		fs.WriteBlockhotFile(maphot, true)
+		fs.WriteBlockhotFile(maphot,true)
 
-	} else {
+	} else{
 		fs.readBlockhotFile()
-		fmt.Printf("初始热数据长度%d\n", len(maphot))
+		fmt.Printf("初始热数据长度%d\n",len(maphot))
 	}
-	//=---------------------------------------------
+	////=---------------------------------------------
 	go func() {
 		for {
 			select {
@@ -319,24 +322,24 @@ func Open(path string, syncFiles bool) (*Datastore, error) {
 				Pr()
 				updata_hc()
 			case <-ticker1.C:
-				for key, v := range maphot {
-					if v <= 5 {
+				for key,v:=range maphot{
+					if v<=5{
 						maps.Lock()
-						delete(maphot, key)
+						delete(maphot,key)
 						maps.Unlock()
 						dir := filepath.Join(fs.path, fs.getDir(key))
 						file := filepath.Join(dir, key+extension)
-						fs.Get_writer(dir, file)
-						fs.WriteBlockhotFile(maphot, true)
-					} else {
+						fs.Get_writer(dir,file)
+						fs.WriteBlockhotFile(maphot,true)
+					}else {
 						maps.Lock()
-						maphot[key] = 1
+						maphot[key]=1
 						maps.Unlock()
 					}
 				}
 
 				fmt.Println("更新本地热数据表成功")
-				//default:
+			//default:
 			}
 		}
 	}()
@@ -399,7 +402,6 @@ func (fs *Datastore) WriteBlockhotFile(hot map[string]int, doSync bool) {
 	}
 	removed = true
 }
-
 // convenience method
 func CreateOrOpen(path string, fun *ShardIdV1, sync bool) (*Datastore, error) {
 	err := Create(path, fun)
@@ -610,7 +612,7 @@ func (fs *Datastore) doPut(key datastore.Key, val []byte) error {
 	//压缩
 	fmt.Printf("doput触发\n")
 	Jl(key.String())
-	va := Lz4_compress(val)
+	va:=Lz4_compress(val)
 	if _, err := tmp.Write(va); err != nil {
 		return err
 	}
@@ -720,7 +722,7 @@ func (fs *Datastore) putMany(data map[datastore.Key][]byte) error {
 		fmt.Printf("doput触发\n")
 		Jl(key.String())
 
-		va := Lz4_compress(value)
+		va:= Lz4_compress(value)
 		//----------------------------------
 		if _, err := tmp.Write(va); err != nil {
 			return err
@@ -784,77 +786,78 @@ func (fs *Datastore) Get(ctx context.Context, key datastore.Key) (value []byte, 
 		return nil, err
 	}
 	////---------------------------解压
-	s := strings.Replace(key.String(), "/", "", -1)
+	s:= strings.Replace(key.String(), "/", "", -1)
 	var da []byte
-	if maphot[s] >= 1 {
+	if maphot[s]>=1{
 		//如果在本地热数据表中则直接使用
-		da = data
-		if maphot[s] < 999 {
+		da=data
+		if maphot[s]<999{
 			maps.Lock()
-			maphot[s] += 1
+			maphot[s]+=1
 			maps.Unlock()
 
 		}
 		//本地热数据使用
 		fmt.Println("本地热数据使用")
-	} else {
+	}else {
 		//如果时冷数据，则解压使用
 		fmt.Println("本地冷数据使用")
-		x := len(maphot)
-		fmt.Printf("本地热数据表长度%d\n", x)
-		da = hc(s)
-		if da != nil {
+		x:=len(maphot)
+		fmt.Printf("本地热数据表长度%d\n",x)
+		da=hc(s)
+		if da!=nil {
 			fmt.Printf("get_缓冲触发\n")
 			Jl(key.String())
 			//如果在临时热数据表中，为热数据则解压使用，写入本地热数据表中
-			if getmap(s) >= 5 {
+
+			if getmap(s)>=5{
 				fmt.Println("写热数据")
-				err := fs.dohotPut(key, da)
-				if err != nil {
+				err:=fs.dohotPut(key,da)
+				if err!=nil{
 					fmt.Printf("写热数据失败")
-				} else {
+				}else {
 					fs.readBlockhotFile()
 					//if maphot[s]<999{
 					maps.Lock()
-					maphot[s] += 1
+					maphot[s]+=1
 					maps.Unlock()
 					//}
-					fs.WriteBlockhotFile(maphot, true)
+					fs.WriteBlockhotFile(maphot,true)
 					fmt.Printf("写热数据成功")
 				}
-				return da, nil
+				return da,nil
 			}
 
 		}
-		da = Lz4_decompress(data)
-		put_hc(s, da)
+		da=Lz4_decompress(data)
+		put_hc(s,da)
 	}
-	//select {
-	//case <-ticker.C:
-	//	Pr()
-	//	updata_hc()
-	//case <-ticker1.C:
-	//	for key,v:=range maphot{
-	//		if v<=5{
-	//			maps.Lock()
-	//			delete(maphot,key)
-	//			maps.Unlock()
-	//			dir := filepath.Join(fs.path, fs.getDir(key))
-	//			file := filepath.Join(dir, key+extension)
-	//			fs.Get_writer(dir,file)
-	//			fs.WriteBlockhotFile(maphot,true)
-	//		}else {
-	//			maps.Lock()
-	//			maphot[key]=1
-	//			maps.Unlock()
-	//		}
-	//	}
-	//
-	//	fmt.Println("更新本地热数据表成功")
-	//default:
-	//}
+			//select {
+			//case <-ticker.C:
+			//	Pr()
+			//	updata_hc()
+			//case <-ticker1.C:
+			//	for key,v:=range maphot{
+			//		if v<=5{
+			//			maps.Lock()
+			//			delete(maphot,key)
+			//			maps.Unlock()
+			//			dir := filepath.Join(fs.path, fs.getDir(key))
+			//			file := filepath.Join(dir, key+extension)
+			//			fs.Get_writer(dir,file)
+			//			fs.WriteBlockhotFile(maphot,true)
+			//		}else {
+			//			maps.Lock()
+			//			maphot[key]=1
+			//			maps.Unlock()
+			//		}
+			//	}
+			//
+			//	fmt.Println("更新本地热数据表成功")
+			//default:
+			//}
 	fmt.Printf("get触发\n")
-	Jl(key.String())
+	//Jl(key.String())
 
 	return da, nil
 }
@@ -866,7 +869,8 @@ func (fs *Datastore) Has(ctx context.Context, key datastore.Key) (exists bool, e
 	}
 
 	fmt.Printf("has触发\n")
-	Jl(key.String())
+
+
 	_, path := fs.encode(key)
 	switch _, err := os.Stat(path); {
 	case err == nil:
@@ -874,6 +878,15 @@ func (fs *Datastore) Has(ctx context.Context, key datastore.Key) (exists bool, e
 	case os.IsNotExist(err):
 		return false, nil
 	default:
+		//压缩
+		//select {
+		//case <-ticker.C:
+		//	Jl(key.String())
+		//	Pr()
+		//	updata_hc()
+		//default:
+			Jl(key.String())
+		//}
 		return false, err
 	}
 }
@@ -884,7 +897,7 @@ func (fs *Datastore) GetSize(ctx context.Context, key datastore.Key) (size int, 
 		return -1, datastore.ErrNotFound
 	}
 	//fmt.Printf("getsize触发\n")
-	Jl(key.String())
+
 
 	_, path := fs.encode(key)
 	switch s, err := os.Stat(path); {
@@ -893,6 +906,7 @@ func (fs *Datastore) GetSize(ctx context.Context, key datastore.Key) (size int, 
 	case os.IsNotExist(err):
 		return -1, datastore.ErrNotFound
 	default:
+		Jl(key.String())
 		return -1, err
 	}
 }
@@ -906,6 +920,7 @@ func (fs *Datastore) Delete(ctx context.Context, key datastore.Key) error {
 		return nil
 	}
 	fmt.Printf("flatfs-Delete")
+
 
 	fs.shutdownLock.RLock()
 	defer fs.shutdownLock.RUnlock()
@@ -928,6 +943,7 @@ func (fs *Datastore) doDelete(key datastore.Key) error {
 
 	fmt.Printf("doDelete触发\n")
 	Deljl(key.String())
+
 
 	fSize := fileSize(path)
 
