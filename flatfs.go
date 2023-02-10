@@ -321,27 +321,52 @@ func Open(path string, syncFiles bool) (*Datastore, error) {
 			case <-ticker.C:
 				Pr()
 				updata_hc()
+			//case <-ticker1.C:
+			//	for key,v:=range maphot{
+			//		if v<=5{
+			//			maps.Lock()
+			//			delete(maphot,key)
+			//			maps.Unlock()
+			//			dir := filepath.Join(fs.path, fs.getDir(key))
+			//			file := filepath.Join(dir, key+extension)
+			//			fs.Get_writer(dir,file)
+			//			fs.WriteBlockhotFile(maphot,true)
+			//		}else {
+			//			maps.Lock()
+			//			maphot[key]=1
+			//			maps.Unlock()
+			//		}
+			//	}
+
+
+			//default:
+			}
+		}
+	}()
+	go func() {
+		for  {
+			select {
 			case <-ticker1.C:
 				for key,v:=range maphot{
 					if v<=5{
-						maps.Lock()
-						delete(maphot,key)
-						maps.Unlock()
 						dir := filepath.Join(fs.path, fs.getDir(key))
 						file := filepath.Join(dir, key+extension)
 						fs.Get_writer(dir,file)
+						maps.Lock()
+						delete(maphot,key)
+						maps.Unlock()
 						fs.WriteBlockhotFile(maphot,true)
+
 					}else {
 						maps.Lock()
 						maphot[key]=1
 						maps.Unlock()
 					}
 				}
-
 				fmt.Println("更新本地热数据表成功")
-			//default:
 			}
 		}
+
 	}()
 	go fs.checkpointLoop()
 	return fs, nil
@@ -797,6 +822,7 @@ func (fs *Datastore) Get(ctx context.Context, key datastore.Key) (value []byte, 
 			maps.Unlock()
 
 		}
+
 		//本地热数据使用
 		fmt.Println("本地热数据使用")
 	}else {
@@ -816,7 +842,7 @@ func (fs *Datastore) Get(ctx context.Context, key datastore.Key) (value []byte, 
 				if err!=nil{
 					fmt.Printf("写热数据失败")
 				}else {
-					fs.readBlockhotFile()
+					//fs.readBlockhotFile()
 					//if maphot[s]<999{
 					maps.Lock()
 					maphot[s]+=1
@@ -827,7 +853,7 @@ func (fs *Datastore) Get(ctx context.Context, key datastore.Key) (value []byte, 
 				}
 				return da,nil
 			}
-
+			return da,nil
 		}
 		da=Lz4_decompress(data)
 		put_hc(s,da)
