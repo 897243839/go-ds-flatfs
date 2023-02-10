@@ -34,8 +34,8 @@ import (
 var maps sync.RWMutex
 var mapLit = make(map[string]int, 1000)
 //var myTimer = time.Now().Unix() // 启动定时器
-var ticker = time.NewTicker(60 * time.Second) //计时器
-var ticker1 = time.NewTicker(30 * time.Minute) //计时器
+var ticker = time.NewTicker(30 * time.Second) //计时器
+var ticker1 = time.NewTicker(1 * time.Minute) //计时器
 
 var hclist = make(map[string][]byte)
 
@@ -343,6 +343,13 @@ func (fs *Datastore) Get_writer(dir string,path string) ( err error) {
 		// no specific error to return, so just pass it through
 		return  err
 	}
+
+	fs.shutdownLock.RLock()
+	defer fs.shutdownLock.RUnlock()
+	if fs.shutdown {
+		return ErrClosed
+	}
+
 	if err := fs.makeDir(dir); err != nil {
 		return err
 	}
