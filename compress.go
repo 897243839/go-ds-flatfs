@@ -2,13 +2,13 @@ package flatfs
 //源数据块的解压缩文件
 import (
 	//"context"
-	//"encoding/json"
+	"encoding/json"
 	//"errors"
 	"fmt"
 	//"math"
 	//"math/rand"
 	"os"
-	//"path/filepath"
+	"path/filepath"
 	"strings"
 	"sync"
 	"github.com/ipfs/go-datastore"
@@ -32,29 +32,71 @@ import (
 
 
 var maps sync.RWMutex
-var mapLit = make(map[string]int, 1000)
+var mapLit =New[int]()
 //var myTimer = time.Now().Unix() // 启动定时器
-var ticker = time.NewTicker(30 * time.Second) //计时器
-var ticker1 = time.NewTicker(1 * time.Minute) //计时器
+var ticker = time.NewTicker(1 * time.Second) //计时器
+var ticker1 = time.NewTicker(3 * time.Minute) //计时器
 
-var hclist = make(map[string][]byte)
+//var hclist = make(map[string][]byte)
+var hclist = New[[]byte]()
+var cb= func(exists bool, valueInMap int, newValue int) int {
+	if !exists {
+		return newValue
+	}
+	valueInMap += newValue
+	return valueInMap
+}
+var ps = &Datastore{
 
+}
+
+func putfs(fs *Datastore)  {
+	ps=fs
+}
+func init() {
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				Pr()
+				updata_hc()
+			//default:
+			}
+		}
+	}()
+	go func() {
+		for  {
+			select {
+			case <-ticker1.C:
+				for key,v:=range maphot.Items(){
+					if v<=5{
+						dir := filepath.Join(ps.path, ps.getDir(key))
+						file := filepath.Join(dir, key+extension)
+						ps.Get_writer(dir,file)
+						maphot.Remove(key)
+						mapw:=maphot.Items()
+						ps.WriteBlockhotFile(mapw,true)
+					}else {
+						maphot.Upsert(key,1,cb)
+					}
+				}
+				fmt.Println("更新本地热数据表成功")
+			}
+		}
+
+	}()
+}
 func hc(key string)[]byte  {
-	maps.Lock()
-	data:=hclist[key]
-	maps.Unlock()
+	data,_:=hclist.Get(key)
 	return data
 }
 func put_hc(key string,data []byte)  {
-	maps.Lock()
-	hclist[key]=data
-	maps.Unlock()
-
+	hclist.Set(key,data)
 }
 func updata_hc()  {
-	println("缓冲大小",len(hclist))
-	hclist=make(map[string][]byte)
-	println("缓冲大小",len(hclist))
+	println("缓冲大小",hclist.Count())
+	hclist.Clear()
+	println("缓冲大小",hclist.Count())
 }
 //lz4解压缩
 func Lz4_compress(val []byte) (value []byte) {
@@ -220,26 +262,16 @@ func Zstd_decompress(data []byte) (value []byte ){
 }
 
 func Pr() {
-
-	//fmt.Println("-------------------------------")
-	//for i,n:= range mapLit{
-	//	fmt.Println(i,n)
-	//}
-	//fmt.Println("-------------------------------")
-
-	mapLit = make(map[string]int, 1000)
-
+	mapLit.Clear()
 }
-
 func Jl(key string) {
 	//------------------------------------------------------------
 	//s:= dshelp.MultihashToDsKey(k.Hash()).String()
 	s:=key
 	s = strings.Replace(s, "/", "", -1)
-	if mapLit[s]<99{
-		maps.Lock()
-		mapLit[s]+=1
-		maps.Unlock()
+	n,_:=mapLit.Get(s)
+	if n<99{
+		mapLit.Upsert(s,1,cb)
 	}
 
 	//var endtime =time.Now().Unix()
@@ -258,28 +290,14 @@ func Jl(key string) {
 }
 func Deljl(key string)  {
 	//---------------------------------------------------------------------
-	maps.Lock()
 	s:= key
 	s = strings.Replace(s, "/", "", -1)
-	delete(mapLit,s)
-	maps.Unlock()
-	//var endtime =time.Now().Unix()
-	//stime:=endtime-myTimer
-	//// do sth repeatly
-	//if stime>=30{
-	//	fmt.Println("-------------------------------")
-	//	for i := range mapLit{
-	//		fmt.Println(i)
-	//	}
-	//	fmt.Println("-------------------------------")
-	//	mapLit = make(map[string]int, 1000)
-	//	myTimer =time.Now().Unix()
-	//
-	//}
-	//------------------------------------------------------------------------
+	mapLit.Remove(s)
+
 }
 func getmap(key string)int{
-	return mapLit[key]
+	n,_:=mapLit.Get(key)
+	return n
 }
 func (fs *Datastore) dohotPut(key datastore.Key, val []byte) error {
 
@@ -362,7 +380,7 @@ func (fs *Datastore) Get_writer(dir string,path string) ( err error) {
 	//压缩
 	fmt.Printf("get_writer触发\n")
 	//Jl(key.String())
-	va:=Lz4_compress(data)
+	va:=Zlib_compress(data)
 	if _, err := tmp.Write(va); err != nil {
 		return err
 	}
@@ -388,4 +406,61 @@ func (fs *Datastore) Get_writer(dir string,path string) ( err error) {
 
 
 	return nil
+}
+// readBlockhotFile is only safe to call in Open()
+func (fs *Datastore) readBlockhotFile() int64 {
+	fpath := filepath.Join(fs.path, block_hot)
+	duB, err := readFile(fpath)
+	if err != nil {
+		return 0
+	}
+	var temp = make(map[string]int)
+	err = json.Unmarshal(duB, &temp)
+	maphot.MSet(temp)
+	if err != nil {
+		return 0
+	}
+	return 1
+}
+func (fs *Datastore) WriteBlockhotFile(hot map[string]int, doSync bool) {
+	tmp, err := fs.tempFile()
+	if err != nil {
+		log.Warnw("could not write hot usage", "error", err)
+		return
+	}
+
+	removed := false
+	closed := false
+	defer func() {
+		if !closed {
+			_ = tmp.Close()
+		}
+		if !removed {
+			// silence errcheck
+			_ = os.Remove(tmp.Name())
+		}
+
+	}()
+
+	encoder := json.NewEncoder(tmp)
+	if err := encoder.Encode(hot); err != nil {
+		log.Warnw("cound not write block hot", "error", err)
+		return
+	}
+	if doSync {
+		if err := tmp.Sync(); err != nil {
+			log.Warnw("cound not sync", "error", err, "file", DiskUsageFile)
+			return
+		}
+	}
+	if err := tmp.Close(); err != nil {
+		log.Warnw("cound not write block hot", "error", err)
+		return
+	}
+	closed = true
+	if err := rename(tmp.Name(), filepath.Join(fs.path, block_hot)); err != nil {
+		log.Warnw("cound not write block hot", "error", err)
+		return
+	}
+	removed = true
 }
